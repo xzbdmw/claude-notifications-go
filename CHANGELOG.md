@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-11-03
+
+### Added
+- **Subagent notification control** - New config option `notifyOnSubagentStop`
+  - Prevents premature "Completed" notifications when Task agents (subagents) finish
+  - Main Claude session continues working without distracting notifications
+  - Default: `false` (notifications disabled for subagents)
+  - Users can enable via `"notifyOnSubagentStop": true` in config if desired
+  - Fixes issue where Plan/Explore agents triggered completion notifications while Claude was still thinking
+
+### Changed
+- SubagentStop hook now checks config before sending notifications
+- Split SubagentStop and Stop hook handling for better control
+
+### Technical Details
+- Added `NotifyOnSubagentStop` boolean field to `NotificationsConfig` struct
+- Updated hook handler in `internal/hooks/hooks.go` to respect config setting
+- Added comprehensive tests for both enabled and disabled states
+- All existing tests pass with new functionality
+
 ## [1.1.2] - 2025-10-25
 
 ### Fixed

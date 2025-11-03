@@ -631,10 +631,11 @@ func TestHandler_NotificationsDisabled(t *testing.T) {
 
 // === SubagentStop Tests ===
 
-func TestHandler_SubagentStop(t *testing.T) {
+func TestHandler_SubagentStop_DisabledByDefault(t *testing.T) {
 	cfg := &config.Config{
 		Notifications: config.NotificationsConfig{
-			Desktop: config.DesktopConfig{Enabled: true},
+			Desktop:              config.DesktopConfig{Enabled: true},
+			NotifyOnSubagentStop: false, // Default: no notifications for subagents
 		},
 		Statuses: map[string]config.StatusInfo{
 			"task_complete": {Title: "Task Complete"},
@@ -658,8 +659,43 @@ func TestHandler_SubagentStop(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
+	// Should NOT send notification when disabled
+	if mockNotif.wasCalled() {
+		t.Error("expected NO notification for SubagentStop (disabled by default)")
+	}
+}
+
+func TestHandler_SubagentStop_EnabledInConfig(t *testing.T) {
+	cfg := &config.Config{
+		Notifications: config.NotificationsConfig{
+			Desktop:              config.DesktopConfig{Enabled: true},
+			NotifyOnSubagentStop: true, // Explicitly enabled
+		},
+		Statuses: map[string]config.StatusInfo{
+			"task_complete": {Title: "Task Complete"},
+		},
+	}
+
+	handler, mockNotif, _ := newTestHandler(t, cfg)
+
+	transcriptPath := createTempTranscript(t,
+		buildTranscriptWithTools([]string{"Write"}, 300))
+
+	hookData := buildHookDataJSON(HookData{
+		SessionID:      "test-session-12",
+		TranscriptPath: transcriptPath,
+		CWD:            "/test",
+	})
+
+	err := handler.HandleHook("SubagentStop", hookData)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Should send notification when explicitly enabled
 	if !mockNotif.wasCalled() {
-		t.Error("expected notification for SubagentStop")
+		t.Error("expected notification for SubagentStop (explicitly enabled)")
 	}
 }
 

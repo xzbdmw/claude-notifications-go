@@ -127,7 +127,7 @@ func (h *Handler) HandleHook(hookEvent string, input io.Reader) error {
 		if err != nil {
 			return err
 		}
-	case "Stop", "SubagentStop":
+	case "Stop":
 		// Analyze the transcript to determine status
 		status, err = h.handleStopEvent(&hookData)
 		if err != nil {
@@ -135,6 +135,19 @@ func (h *Handler) HandleHook(hookEvent string, input io.Reader) error {
 		}
 		// Note: We don't delete session state here to preserve cooldown info
 		// State files have TTL and will be cleaned up automatically
+		defer h.cleanupOldLocks()
+	case "SubagentStop":
+		// Check config: should we notify on subagent completion?
+		if !h.cfg.Notifications.NotifyOnSubagentStop {
+			logging.Debug("SubagentStop: notifications disabled (config), skipping")
+			return nil
+		}
+		// If enabled, handle like Stop
+		logging.Debug("SubagentStop: notifications enabled (config), processing")
+		status, err = h.handleStopEvent(&hookData)
+		if err != nil {
+			return err
+		}
 		defer h.cleanupOldLocks()
 	default:
 		return fmt.Errorf("unknown hook event: %s", hookEvent)

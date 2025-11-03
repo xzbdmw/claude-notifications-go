@@ -21,6 +21,7 @@ type NotificationsConfig struct {
 	Webhook                                     WebhookConfig `json:"webhook"`
 	SuppressQuestionAfterTaskCompleteSeconds    int           `json:"suppressQuestionAfterTaskCompleteSeconds"`
 	SuppressQuestionAfterAnyNotificationSeconds int           `json:"suppressQuestionAfterAnyNotificationSeconds"`
+	NotifyOnSubagentStop                        bool          `json:"notifyOnSubagentStop"` // Send notifications when subagents (Task tool) complete, default: false
 }
 
 // DesktopConfig represents desktop notification settings
