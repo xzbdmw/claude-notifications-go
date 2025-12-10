@@ -12,6 +12,5 @@
     "commands": [
         "./commands/notifications-init.md",
         "./commands/notifications-settings.md"
-    ],
-    "hooks": ["./hooks/hooks.json"]
+    ]
 }
