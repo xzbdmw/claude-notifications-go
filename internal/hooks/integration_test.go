@@ -557,10 +557,10 @@ func TestE2E_WebhookGracefulShutdown(t *testing.T) {
 		Notifications: config.NotificationsConfig{
 			Desktop: config.DesktopConfig{Enabled: false},
 			Webhook: config.WebhookConfig{
-				Enabled: true,
-				URL:     server.URL,
-				Format:  "json",
-				Retry:   config.RetryConfig{Enabled: false},
+				Enabled:        true,
+				URL:            server.URL,
+				Format:         "json",
+				Retry:          config.RetryConfig{Enabled: false},
 				CircuitBreaker: config.CircuitBreakerConfig{Enabled: false},
 				RateLimit:      config.RateLimitConfig{Enabled: false},
 			},

@@ -620,4 +620,3 @@ func TestWebhookShutdownWaitsForRequests(t *testing.T) {
 		t.Error("Request should have completed before Shutdown returned")
 	}
 }
-
