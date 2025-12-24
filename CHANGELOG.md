@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2025-12-24
+
+### Fixed
+- **Click-to-focus now works on macOS Sequoia (15.x)** 🎯
+  - Removed `-sender` option that was conflicting with `-activate`
+  - Trade-off: notifications no longer show custom Claude icon
+  - Click-to-focus now reliably activates terminal window
+
 ## [1.4.1] - 2025-12-24
 
 ### Fixed
@@ -20,10 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enable with `"clickToFocus": true` in desktop config (enabled by default)
   - Manual override: `"terminalBundleID": "com.your.terminal"`
 
-- **Claude icon in notifications** 🤖
+- **Claude icon in notifications** 🤖 *(removed in 1.4.2 due to macOS Sequoia conflict)*
   - Custom Claude icon displayed on the left side of macOS notifications
   - Auto-creates `ClaudeNotifications.app` on first notification
-  - No manual setup required — works automatically after plugin update
+  - ⚠️ Removed in v1.4.2: `-sender` option conflicted with click-to-focus on macOS 15.x
 
 ### Changed
 - **Shorter notification titles**
@@ -33,9 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `📋 Plan Ready for Review` → `📋 Plan`
 
 ### Technical
-- Added `EnsureClaudeNotificationsApp()` for on-the-fly app creation
 - Terminal bundle ID detection via `__CFBundleIdentifier` and `TERM_PROGRAM`
-- Uses `-sender com.claude.notifications` for reliable icon display
+- ~~Uses `-sender com.claude.notifications` for reliable icon display~~ (removed in 1.4.2)
 
 ## [1.3.0] - 2025-12-24
 

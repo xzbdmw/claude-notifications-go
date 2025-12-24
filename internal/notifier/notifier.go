@@ -95,12 +95,6 @@ func (n *Notifier) SendDesktop(status analyzer.Status, message string) error {
 // sendWithTerminalNotifier sends notification via terminal-notifier on macOS
 // with click-to-focus support (clicking notification activates the terminal)
 func (n *Notifier) sendWithTerminalNotifier(title, message string) error {
-	// Ensure ClaudeNotifications.app exists for notification icon
-	// This creates it on-the-fly if user updated plugin without running /notifications-init
-	if err := EnsureClaudeNotificationsApp(); err != nil {
-		logging.Debug("Could not ensure ClaudeNotifications.app: %v", err)
-	}
-
 	notifierPath, err := GetTerminalNotifierPath()
 	if err != nil {
 		return fmt.Errorf("terminal-notifier not found: %w", err)
@@ -127,9 +121,9 @@ func buildTerminalNotifierArgs(title, message, bundleID string) []string {
 		"-title", title,
 		"-message", message,
 		"-activate", bundleID,
-		// Use custom sender app for Claude icon on the left side of notification
-		// The ClaudeNotifications.app must be registered with Launch Services
-		"-sender", "com.claude.notifications",
+		// Note: -sender option removed because it conflicts with -activate on macOS Sequoia (15.x)
+		// Using -sender causes click-to-focus to stop working.
+		// Trade-off: no custom Claude icon, but click-to-focus works reliably.
 	}
 
 	// Add group ID to prevent notification stacking issues

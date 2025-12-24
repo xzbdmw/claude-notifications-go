@@ -546,10 +546,7 @@ func TestBuildTerminalNotifierArgs_Basic(t *testing.T) {
 		t.Error("Missing or incorrect -activate argument")
 	}
 
-	// Check that -sender is present for Claude icon
-	if !containsArg(args, "-sender", "com.claude.notifications") {
-		t.Error("Missing or incorrect -sender argument")
-	}
+	// Note: -sender was removed because it conflicts with -activate on macOS Sequoia
 
 	// Check that -group is present (for deduplication)
 	hasGroup := false
@@ -564,12 +561,15 @@ func TestBuildTerminalNotifierArgs_Basic(t *testing.T) {
 	}
 }
 
-func TestBuildTerminalNotifierArgs_WithSender(t *testing.T) {
+func TestBuildTerminalNotifierArgs_NoSender(t *testing.T) {
+	// -sender was removed because it conflicts with -activate on macOS Sequoia (15.x)
+	// This test verifies that -sender is NOT present
 	args := buildTerminalNotifierArgs("Title", "Message", "com.test.app")
 
-	// Verify -sender is always set to Claude notifications app
-	if !containsArg(args, "-sender", "com.claude.notifications") {
-		t.Error("Missing or incorrect -sender argument")
+	for _, arg := range args {
+		if arg == "-sender" {
+			t.Error("-sender should not be present (conflicts with -activate on macOS Sequoia)")
+		}
 	}
 }
 
@@ -739,11 +739,11 @@ func TestBuildTerminalNotifierArgs_ArgumentOrder(t *testing.T) {
 	args := buildTerminalNotifierArgs("Title", "Message", "com.test.app")
 
 	// Verify argument structure: each flag should be followed by its value
+	// Note: -sender was removed because it conflicts with -activate on macOS Sequoia
 	expectedPairs := map[string]string{
 		"-title":    "Title",
 		"-message":  "Message",
 		"-activate": "com.test.app",
-		"-sender":   "com.claude.notifications",
 	}
 
 	for flag, expectedValue := range expectedPairs {
