@@ -245,7 +245,7 @@ func generateTaskSummary(messages []jsonl.Message, cfg *config.Config) string {
 		// If message is short (< 150 chars), use it as-is
 		// Otherwise extract first sentence(s)
 		var messageText string
-		if len(cleaned) < 150 {
+		if len([]rune(cleaned)) < 150 {
 			messageText = cleaned
 		} else {
 			messageText = extractFirstSentence(cleaned)
@@ -554,20 +554,22 @@ func extractFirstSentence(text string) string {
 	}
 
 	// Return first 100 chars if no punctuation found
-	if len(text) > 100 {
+	if len(runes) > 100 {
 		return string(runes[:100])
 	}
 	return text
 }
 
 func truncateText(text string, maxLen int) string {
-	if len(text) <= maxLen {
+	runes := []rune(text)
+	if len(runes) <= maxLen {
 		return text
 	}
 
 	// Step 1: Try to find sentence boundary (., !, ?) within maxLen
 	// Look for the last sentence-ending punctuation in the allowed range
-	searchText := text[:maxLen]
+	// Use runes to avoid cutting in the middle of a multi-byte character
+	searchText := string(runes[:maxLen])
 
 	// Check for sentence enders: ". ", "! ", "? " (followed by space or newline)
 	// Also check for end of string within maxLen
@@ -611,11 +613,13 @@ func truncateText(text string, maxLen int) string {
 
 	if lastSentenceEnd >= 0 {
 		// Found a sentence boundary, truncate there (including the punctuation)
-		return strings.TrimSpace(text[:lastSentenceEnd+1])
+		return strings.TrimSpace(searchText[:lastSentenceEnd+1])
 	}
 
 	// Step 2: No sentence boundary found, try word boundary
-	truncated := text[:maxLen-3]
+	// Still use runes to be safe
+	truncatedRunes := runes[:maxLen-3]
+	truncated := string(truncatedRunes)
 	lastSpace := strings.LastIndex(truncated, " ")
 	if lastSpace > maxLen/2 {
 		truncated = truncated[:lastSpace]

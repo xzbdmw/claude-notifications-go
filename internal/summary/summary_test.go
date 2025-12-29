@@ -210,13 +210,31 @@ func TestTruncateText(t *testing.T) {
 			maxLen:   50,
 			expected: strings.Repeat("a", 47) + "...",
 		},
+		{
+			name:     "Multibyte truncate",
+			text:     strings.Repeat("α", 100),
+			maxLen:   50,
+			expected: strings.Repeat("α", 47) + "...",
+		},
+		{
+			name:     "Multibyte truncate with sentence boundary",
+			text:     "Это первое предложение. Это второе предложение.",
+			maxLen:   30,
+			expected: "Это первое предложение.",
+		},
+		{
+			name:     "Multibyte truncate at word boundary",
+			text:     "Один два три четыре пять",
+			maxLen:   15,
+			expected: "Один два...",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := truncateText(tt.text, tt.maxLen)
-			if len(result) > tt.maxLen {
-				t.Errorf("truncateText() returned text longer than maxLen: %d > %d", len(result), tt.maxLen)
+			if len([]rune(result)) > tt.maxLen {
+				t.Errorf("truncateText() returned text longer than maxLen: %d > %d", len([]rune(result)), tt.maxLen)
 			}
 			if result != tt.expected {
 				t.Errorf("truncateText() = %q, want %q", result, tt.expected)
@@ -285,6 +303,21 @@ func TestExtractFirstSentence(t *testing.T) {
 			name:     "IP address should not split",
 			text:     "Connected to 192.168.1.1 successfully. Server is running.",
 			expected: "Connected to 192.168.1.1 successfully.",
+		},
+		{
+			name:     "Multi-byte characters without punctuation panic",
+			text:     strings.Repeat("α", 60), // 60 chars (runes), 120 bytes
+			expected: strings.Repeat("α", 60),
+		},
+		{
+			name:     "Emoji support",
+			text:     "🚀 Rocket is fast! 🌟 Star is bright.",
+			expected: "🚀 Rocket is fast!",
+		},
+		{
+			name:     "Long emoji string without punctuation",
+			text:     strings.Repeat("🚀", 60),
+			expected: strings.Repeat("🚀", 60),
 		},
 	}
 
@@ -1326,8 +1359,42 @@ func TestGenerateTaskSummary_LongMessage(t *testing.T) {
 		t.Error("generateTaskSummary() returned empty string")
 	}
 	// Should truncate long message
-	if len(result) > 200 {
-		t.Errorf("generateTaskSummary() result too long: %d chars", len(result))
+	if len([]rune(result)) > 200 {
+		t.Errorf("generateTaskSummary() result too long: %d chars", len([]rune(result)))
+	}
+}
+
+func TestGenerateTaskSummary_MultibyteThreshold(t *testing.T) {
+	cfg := &config.Config{}
+	userTS := time.Now().Add(-10 * time.Second).Format(time.RFC3339)
+	assistantTS := time.Now().Format(time.RFC3339)
+
+	// A message that is > 150 bytes but < 150 runes
+	// "α" is 2 bytes. 80 * 2 = 160 bytes. But only 80 runes.
+	multibyteText := strings.Repeat("α", 80)
+
+	messages := []jsonl.Message{
+		{
+			Type:      "user",
+			Timestamp: userTS,
+			Message:   jsonl.MessageContent{ContentString: "Task"},
+		},
+		{
+			Type:      "assistant",
+			Timestamp: assistantTS,
+			Message: jsonl.MessageContent{
+				Content: []jsonl.Content{
+					{Type: "text", Text: multibyteText},
+				},
+			},
+		},
+	}
+
+	result := generateTaskSummary(messages, cfg)
+	// Because it's < 150 runes, it should NOT be passed to extractFirstSentence
+	// and should be returned as-is (possibly truncated by the final truncateText(150))
+	if !strings.Contains(result, multibyteText) {
+		t.Errorf("generateTaskSummary should not have extracted first sentence for short rune-count message, got: %q", result)
 	}
 }
 
