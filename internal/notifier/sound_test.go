@@ -55,123 +55,44 @@ func TestPlaySoundWithBuiltInFiles(t *testing.T) {
 	}
 }
 
-// TestDecodeAudioFormats tests decoding various audio formats
-func TestDecodeAudioFormats(t *testing.T) {
-	soundsDir := findSoundsDirectory()
-	if soundsDir == "" {
-		t.Skip("Sounds directory not found")
-	}
-
-	cfg := config.DefaultConfig()
-	cfg.Notifications.Desktop.Volume = 0.3 // 30% volume for tests
-	n := New(cfg)
-	defer n.Close()
-
-	// Test MP3 decoding
-	mp3Path := filepath.Join(soundsDir, "task-complete.mp3")
-	if platform.FileExists(mp3Path) {
-		t.Run("decode MP3", func(t *testing.T) {
-			streamer, format, err := n.decodeAudio(mp3Path)
-			if err != nil {
-				t.Errorf("decodeAudio(MP3) failed: %v", err)
-				return
-			}
-			defer streamer.Close()
-
-			if format.SampleRate == 0 {
-				t.Error("decodeAudio(MP3) returned zero sample rate")
-			}
-			if format.NumChannels == 0 {
-				t.Error("decodeAudio(MP3) returned zero channels")
-			}
-		})
-	}
-
-	// Test AIFF decoding (macOS system sounds)
-	if platform.IsMacOS() {
-		aiffPath := "/System/Library/Sounds/Glass.aiff"
-		if platform.FileExists(aiffPath) {
-			t.Run("decode AIFF", func(t *testing.T) {
-				streamer, format, err := n.decodeAudio(aiffPath)
-				if err != nil {
-					t.Errorf("decodeAudio(AIFF) failed: %v", err)
-					return
-				}
-				defer streamer.Close()
-
-				if format.SampleRate == 0 {
-					t.Error("decodeAudio(AIFF) returned zero sample rate")
-				}
-				if format.NumChannels == 0 {
-					t.Error("decodeAudio(AIFF) returned zero channels")
-				}
-			})
-		}
-	}
-}
-
-// TestUnsupportedFormat tests handling of unsupported audio formats
-func TestUnsupportedFormat(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Notifications.Desktop.Volume = 0.3 // 30% volume for tests
-	n := New(cfg)
-	defer n.Close()
-
-	// Create a temporary file with unsupported extension
-	tmpfile, err := os.CreateTemp("", "test*.xyz")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.Remove(tmpfile.Name())
-	tmpfile.Close()
-
-	_, _, err = n.decodeAudio(tmpfile.Name())
-	if err == nil {
-		t.Error("decodeAudio() expected error for unsupported format, got nil")
-	}
-}
-
-// TestNonExistentFile tests handling of non-existent files
-func TestNonExistentFile(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Notifications.Desktop.Volume = 0.3 // 30% volume for tests
-	n := New(cfg)
-	defer n.Close()
-
-	nonExistentPath := "/tmp/this-file-does-not-exist-xyz123.mp3"
-
-	_, _, err := n.decodeAudio(nonExistentPath)
-	if err == nil {
-		t.Error("decodeAudio() expected error for non-existent file, got nil")
-	}
-}
-
-// TestSpeakerInitialization tests speaker initialization
-func TestSpeakerInitialization(t *testing.T) {
+// TestPlayerInitialization tests audio player initialization
+func TestPlayerInitialization(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Notifications.Desktop.Volume = 0.3 // 30% volume for tests
 	n := New(cfg)
 	defer n.Close()
 
 	// First initialization
-	err := n.initSpeaker()
+	err := n.initPlayer()
 	if err != nil {
-		t.Errorf("initSpeaker() first call returned error: %v", err)
+		t.Errorf("initPlayer() first call returned error: %v", err)
 	}
 
-	// Check that speaker was initialized
-	n.mu.Lock()
-	inited := n.speakerInited
-	n.mu.Unlock()
-
-	if !inited {
-		t.Error("initSpeaker() did not set speakerInited flag")
+	// Check that player was initialized
+	if n.audioPlayer == nil {
+		t.Error("initPlayer() did not create audioPlayer")
 	}
 
 	// Second initialization should be safe (no-op due to sync.Once)
-	err = n.initSpeaker()
+	err = n.initPlayer()
 	if err != nil {
-		t.Errorf("initSpeaker() second call returned error: %v", err)
+		t.Errorf("initPlayer() second call returned error: %v", err)
+	}
+}
+
+// TestPlayerWithCustomDevice tests audio player with custom device
+func TestPlayerWithCustomDevice(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Volume = 0.3
+	cfg.Notifications.Desktop.AudioDevice = "NonExistentDevice12345"
+
+	n := New(cfg)
+	defer n.Close()
+
+	// Initialization should fail for non-existent device
+	err := n.initPlayer()
+	if err == nil {
+		t.Error("initPlayer() expected error for non-existent device, got nil")
 	}
 }
 
@@ -189,18 +110,6 @@ func TestGracefulShutdown(t *testing.T) {
 	err := n.Close()
 	if err != nil {
 		t.Errorf("Close() returned error: %v", err)
-	}
-
-	// Check that speaker was closed
-	n.mu.Lock()
-	inited := n.speakerInited
-	n.mu.Unlock()
-
-	// After Close(), speaker should still be marked as initialized
-	// (we don't reset the flag, just close the speaker)
-	if !inited {
-		// This is actually OK - speaker might not have been initialized
-		t.Log("Speaker was not initialized")
 	}
 }
 

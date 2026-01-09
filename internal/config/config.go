@@ -29,6 +29,7 @@ type DesktopConfig struct {
 	Enabled          bool    `json:"enabled"`
 	Sound            bool    `json:"sound"`
 	Volume           float64 `json:"volume"`           // Volume level 0.0-1.0, default 1.0 (full volume)
+	AudioDevice      string  `json:"audioDevice"`      // Audio output device name (empty = system default)
 	AppIcon          string  `json:"appIcon"`          // Path to app icon
 	ClickToFocus     bool    `json:"clickToFocus"`     // macOS: activate terminal on notification click (default: true)
 	TerminalBundleID string  `json:"terminalBundleId"` // macOS: override auto-detected terminal bundle ID (empty = auto)

@@ -158,28 +158,6 @@ func TestSendDesktopRestoresAppName(t *testing.T) {
 	}
 }
 
-func TestVolumeToGain(t *testing.T) {
-	tests := []struct {
-		name     string
-		volume   float64
-		expected float64
-	}{
-		{"0% volume", 0.0, -1.0},
-		{"30% volume", 0.3, -0.7},
-		{"50% volume", 0.5, -0.5},
-		{"100% volume", 1.0, 0.0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := volumeToGain(tt.volume)
-			if result != tt.expected {
-				t.Errorf("volumeToGain(%.1f) = %.1f, want %.1f", tt.volume, result, tt.expected)
-			}
-		})
-	}
-}
-
 // === Tests for Click-to-Focus functionality ===
 
 func TestSendDesktop_ClickToFocusDisabled(t *testing.T) {
@@ -501,28 +479,6 @@ func TestExtractSessionInfo_MoreCases(t *testing.T) {
 			}
 			if cleanMsg != tt.expectedCleanMsg {
 				t.Errorf("extractSessionInfo(%q) cleanMsg = %q, want %q", tt.message, cleanMsg, tt.expectedCleanMsg)
-			}
-		})
-	}
-}
-
-func TestVolumeToGain_EdgeCases(t *testing.T) {
-	tests := []struct {
-		name     string
-		volume   float64
-		expected float64
-	}{
-		{"Negative volume", -0.5, -1.5},
-		{"Volume above 1", 1.5, 0.5},
-		{"Very small volume", 0.01, -0.99},
-		{"Volume 0.1", 0.1, -0.9},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := volumeToGain(tt.volume)
-			if result != tt.expected {
-				t.Errorf("volumeToGain(%.2f) = %.2f, want %.2f", tt.volume, result, tt.expected)
 			}
 		})
 	}

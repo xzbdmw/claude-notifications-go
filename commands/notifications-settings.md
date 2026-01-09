@@ -34,6 +34,7 @@ This setup wizard is INTERACTIVE. Users can preview sounds at ANY time by saying
 - Step 3: **INTERACTIVE PREVIEW PHASE** - let user explore sounds freely
 - Step 4: Ask 4 questions (Task/Review/Question/Plan) - remind about preview before each
 - Step 5: Volume configuration
+- Step 5.5: Audio device selection (optional)
 - Step 6: Webhook configuration
 - Step 7: Generate config.json
 - Step 8: Summary & test
@@ -477,6 +478,48 @@ echo "How does that sound? (If you want to adjust, just let me know)"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+## Step 5.5: Audio Device Selection (Optional)
+
+You can route notification sounds to a specific audio output device instead of using the system default.
+
+First, list available audio devices:
+
+```bash
+# Get plugin root
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+if [ -z "$PLUGIN_ROOT" ]; then
+  INSTALLED_PATH="$HOME/.claude/plugins/marketplaces/claude-notifications-go"
+  if [ -d "$INSTALLED_PATH" ]; then
+    PLUGIN_ROOT="$INSTALLED_PATH"
+  else
+    PLUGIN_ROOT="$(pwd)"
+  fi
+fi
+
+echo "Available audio output devices:"
+"${PLUGIN_ROOT}/bin/list-devices"
+```
+
+Use AskUserQuestion with:
+- question: "Which audio output device should play notification sounds?"
+- header: "🔊 Audio Device"
+- multiSelect: false
+- options:
+  1. **System default** - "Use the system's default audio output (recommended)"
+  2. **Specific device** - "Choose a specific audio device from the list above"
+
+If user selects "Specific device":
+- Ask them to type the exact device name from the list
+- Store the device name for the config file
+
+**Device name mapping:**
+- "System default" → `""` (empty string in config)
+- Specific device → exact device name as shown by list-devices (e.g., "MacBook Pro-Lautsprecher")
+
+**Note:** Leave `audioDevice` empty to use the system default. This is recommended unless you have a specific reason to route audio elsewhere.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
 ## Step 6: Webhook Configuration (Optional)
 
 Do you want to send notifications to a webhook (Slack, Discord, Telegram)?
@@ -555,6 +598,7 @@ PLAN_READY_PATH=$(get_sound_path "$user_answer_4")
       "enabled": true,
       "sound": true,
       "volume": <user's selected volume>,
+      "audioDevice": "<user's selected device or empty string>",
       "appIcon": "${CLAUDE_PLUGIN_ROOT}/claude_icon.png"
     },
     "webhook": {
@@ -612,6 +656,7 @@ After creating the configuration, show the user:
 
   🔊 Desktop notifications: ENABLED
   🔊 Volume: <selected volume>%
+  🔊 Audio device: <selected device or "System default">
   🔗 Webhooks: <ENABLED/DISABLED>
 
 Configuration file: config/config.json
@@ -658,7 +703,8 @@ If you enabled webhooks, you'll need to manually edit `config/config.json` to ad
 
 **Sound Formats Supported:**
 - MP3, WAV, FLAC, OGG/Vorbis, AIFF
-- Cross-platform playback via gopxl/beep library
+- Cross-platform playback via malgo (miniaudio) library
+- Audio device selection supported on all platforms
 
 **System Sounds:**
 - macOS: `/System/Library/Sounds/*.aiff`

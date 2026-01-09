@@ -111,6 +111,7 @@ The binary is downloaded once and cached locally. You can re-run `/claude-notifi
 ### 🔊 Audio Customization
 - **Multi-format support**: MP3, WAV, FLAC, OGG, AIFF
 - **Volume control**: 0-100% customizable volume
+- **Audio device selection**: Route notifications to a specific output device (e.g., "MacBook Pro-Lautsprecher")
 - **Built-in sounds**: Professional notification sounds included
 - **System sounds**: Use macOS/Linux system sounds (optional)
 - **Sound preview**: Test sounds before choosing with `/claude-notifications-go:notifications-settings`
@@ -225,6 +226,7 @@ Alternatively, edit `config/config.json` directly:
       "enabled": true,
       "sound": true,
       "volume": 1.0,
+      "audioDevice": "",
       "appIcon": "${CLAUDE_PLUGIN_ROOT}/claude_icon.png"
     },
     "webhook": {
@@ -276,6 +278,34 @@ Alternatively, edit `config/config.json` directly:
 
 **Supported formats:** MP3, WAV, FLAC, OGG/Vorbis, AIFF
 
+### Audio Device Selection
+
+Route notification sounds to a specific audio output device instead of the system default:
+
+```bash
+# List available audio devices
+bin/list-devices
+
+# Output:
+#   0: MacBook Pro-Lautsprecher
+#   1: Babyface (23314790) (default)
+#   2: Immersed
+```
+
+Then add the device name to your `config.json`:
+
+```json
+{
+  "notifications": {
+    "desktop": {
+      "audioDevice": "MacBook Pro-Lautsprecher"
+    }
+  }
+}
+```
+
+Leave `audioDevice` empty or omit it to use the system default device.
+
 ### Test Sound Playback
 
 Preview any sound file with optional volume control:
@@ -306,14 +336,16 @@ bin/sound-preview --help
 cmd/
   claude-notifications/     # CLI entry point
   sound-preview/            # Sound preview utility
+  list-devices/             # List available audio output devices
 internal/
+  audio/                    # Audio playback with device selection (malgo)
   config/                   # Configuration loading and validation
   logging/                  # Structured logging to notification-debug.log
   platform/                 # Cross-platform utilities (temp dirs, mtime, etc.)
   analyzer/                 # JSONL parsing and state machine
   state/                    # Per-session state and cooldown management
   dedup/                    # Two-phase lock deduplication
-  notifier/                 # Desktop notifications and native sound playback
+  notifier/                 # Desktop notifications and sound playback
   webhook/                  # Webhook integrations (Slack/Discord/Telegram/Custom)
   hooks/                    # Hook routing (PreToolUse/Stop/SubagentStop/Notification)
   summary/                  # Message summarization and markdown cleanup
