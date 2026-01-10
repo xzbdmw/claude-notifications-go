@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-01-10
+
+### Added
+- **double-shot-latte compatibility** 🤝
+  - Notifications are now automatically suppressed when running in background judge mode
+  - Detects `CLAUDE_HOOK_JUDGE_MODE=true` environment variable set by [double-shot-latte](https://github.com/obra/double-shot-latte) plugin
+  - Zero configuration required - just update the plugin and it works automatically
+  - Other plugin developers can use the same mechanism to suppress notifications in background Claude instances
+
+### Documentation
+- Added **🤝 Plugin Compatibility** section to README
+- Documented how other plugins can suppress notifications using `CLAUDE_HOOK_JUDGE_MODE=true`
+
 ## [1.7.2] - 2026-01-10
 
 ### Improved
