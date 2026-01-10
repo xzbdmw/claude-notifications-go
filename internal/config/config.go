@@ -21,7 +21,8 @@ type NotificationsConfig struct {
 	Webhook                                     WebhookConfig `json:"webhook"`
 	SuppressQuestionAfterTaskCompleteSeconds    int           `json:"suppressQuestionAfterTaskCompleteSeconds"`
 	SuppressQuestionAfterAnyNotificationSeconds int           `json:"suppressQuestionAfterAnyNotificationSeconds"`
-	NotifyOnSubagentStop                        bool          `json:"notifyOnSubagentStop"` // Send notifications when subagents (Task tool) complete, default: false
+	NotifyOnSubagentStop                        bool          `json:"notifyOnSubagentStop"`  // Send notifications when subagents (Task tool) complete, default: false
+	NotifyOnTextResponse                        *bool         `json:"notifyOnTextResponse"` // Send notifications for text-only responses (no tools), default: true
 }
 
 // DesktopConfig represents desktop notification settings
@@ -296,4 +297,12 @@ func (c *Config) IsWebhookEnabled() bool {
 // IsAnyNotificationEnabled returns true if at least one notification method is enabled
 func (c *Config) IsAnyNotificationEnabled() bool {
 	return c.IsDesktopEnabled() || c.IsWebhookEnabled()
+}
+
+// ShouldNotifyOnTextResponse returns true if notifications should be sent for text-only responses (default: true)
+func (c *Config) ShouldNotifyOnTextResponse() bool {
+	if c.Notifications.NotifyOnTextResponse == nil {
+		return true // Default: notify on text responses
+	}
+	return *c.Notifications.NotifyOnTextResponse
 }

@@ -208,8 +208,8 @@ func TestAnalyzeTranscript_ReviewComplete(t *testing.T) {
 			name:        "no_tools",
 			tools:       []string{},
 			textLength:  300,
-			wantStatus:  StatusUnknown,
-			description: "No tools used at all",
+			wantStatus:  StatusTaskComplete,
+			description: "No tools used - text response (notifyOnTextResponse=true by default)",
 		},
 		{
 			name:        "passive_tools_without_read_like",
@@ -512,21 +512,44 @@ func TestAnalyzeTranscript_EdgeCases(t *testing.T) {
 		}
 	})
 
-	t.Run("assistant_message_without_tools", func(t *testing.T) {
+	t.Run("assistant_message_without_tools_default", func(t *testing.T) {
 		messages := []jsonl.Message{
 			buildUserMessage("Hello"),
 			buildAssistantWithTools([]string{}, "I understand your request."),
 		}
 		transcriptPath := buildTranscriptFile(t, messages)
 
-		cfg := &config.Config{}
+		cfg := &config.Config{} // Default: notifyOnTextResponse=true
+		status, err := AnalyzeTranscript(transcriptPath, cfg)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if status != StatusTaskComplete {
+			t.Errorf("got %v, want StatusTaskComplete for text-only response (default)", status)
+		}
+	})
+
+	t.Run("assistant_message_without_tools_disabled", func(t *testing.T) {
+		messages := []jsonl.Message{
+			buildUserMessage("Hello"),
+			buildAssistantWithTools([]string{}, "I understand your request."),
+		}
+		transcriptPath := buildTranscriptFile(t, messages)
+
+		notifyOnText := false
+		cfg := &config.Config{
+			Notifications: config.NotificationsConfig{
+				NotifyOnTextResponse: &notifyOnText,
+			},
+		}
 		status, err := AnalyzeTranscript(transcriptPath, cfg)
 
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if status != StatusUnknown {
-			t.Errorf("got %v, want StatusUnknown for no tools", status)
+			t.Errorf("got %v, want StatusUnknown when notifyOnTextResponse=false", status)
 		}
 	})
 

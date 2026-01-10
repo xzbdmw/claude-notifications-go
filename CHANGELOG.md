@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-01-10
+
+### Added
+- **`notifyOnTextResponse` config option** - notifications now arrive for text-only responses (e.g., extended thinking "Baked for 32s")
+  - Default: `true` (enabled)
+  - Set to `false` in config to disable notifications when Claude responds without using tools
+
+### Fixed
+- Fixed test flakiness on Go 1.25+ by cleaning up stale state files between test runs
+
 ## [1.9.0] - 2026-01-10
 
 ### Added

@@ -134,7 +134,13 @@ func AnalyzeTranscript(transcriptPath string, cfg *config.Config) (Status, error
 		return StatusTaskComplete, nil
 	}
 
-	// 2. No tools found → unknown (skip notification)
+	// 2. No tools found
+	// If notifyOnTextResponse is enabled (default: true), treat as task_complete
+	// This handles cases like extended thinking where Claude responds with text only
+	if cfg.ShouldNotifyOnTextResponse() {
+		return StatusTaskComplete, nil
+	}
+
 	return StatusUnknown, nil
 }
 

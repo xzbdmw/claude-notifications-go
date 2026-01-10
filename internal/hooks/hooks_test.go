@@ -205,6 +205,22 @@ func newTestHandler(t *testing.T, cfg *config.Config) (*Handler, *mockNotifier, 
 	// Tests that need judge mode set should call t.Setenv AFTER calling newTestHandler
 	t.Setenv("CLAUDE_HOOK_JUDGE_MODE", "")
 
+	// Cleanup state/lock files from previous test runs
+	// This prevents duplicate detection issues on fast Go versions (1.25+)
+	// where tests run faster than the 180-second duplicate window
+	testSessionPatterns := []string{
+		"claude-session-state-test-*.json",
+		"claude-notification-test-*.lock",
+		"claude-content-lock-test-*.lock",
+	}
+	tempDir := os.TempDir()
+	for _, pattern := range testSessionPatterns {
+		matches, _ := filepath.Glob(filepath.Join(tempDir, pattern))
+		for _, f := range matches {
+			_ = os.Remove(f)
+		}
+	}
+
 	mockNotif := &mockNotifier{}
 	mockWH := &mockWebhook{}
 
