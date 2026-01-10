@@ -431,6 +431,13 @@ test_lock_stale_removal() {
 
 test_lock_cleanup_on_exit() {
     echo -e "\n${CYAN}▶ test_lock_cleanup_on_exit${NC}"
+
+    # Skip on Windows - trap behavior differs in Git Bash
+    if is_windows; then
+        skip_test "Lock cleanup on exit" "trap behavior differs on Windows"
+        return
+    fi
+
     setup_test_dir
 
     # Run install with unreachable URL to fail fast
