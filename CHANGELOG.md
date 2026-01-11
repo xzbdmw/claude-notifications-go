@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2026-01-11
+
+### Added
+- **Auto-download after plugin auto-update** - binaries now download automatically when hook is first called
+  - Previously: after Claude auto-updated the plugin, binary was missing and hooks failed
+  - Now: `hook-wrapper.sh` detects missing binary and triggers download on first use
+  - Zero downtime: if download fails, hooks exit gracefully without blocking Claude
+  - POSIX-compatible wrapper works on macOS, Linux, and Windows (Git Bash)
+
+### Technical
+- New `bin/hook-wrapper.sh` - lazy binary download wrapper
+- Updated `hooks/hooks.json` - all hooks now use wrapper
+- 17 new E2E tests for hook-wrapper covering offline, mock, and real network scenarios
+
 ## [1.10.0] - 2026-01-10
 
 ### Added

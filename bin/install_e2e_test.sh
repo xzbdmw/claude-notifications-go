@@ -349,6 +349,20 @@ skip_test() {
     TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
 }
 
+pass_test() {
+    local msg="$1"
+    TESTS_RUN=$((TESTS_RUN + 1))
+    echo -e "  ${GREEN}✓${NC} $msg"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+}
+
+fail_test() {
+    local msg="$1" detail="$2"
+    TESTS_RUN=$((TESTS_RUN + 1))
+    echo -e "  ${RED}✗${NC} $msg ($detail)"
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+}
+
 #=============================================================================
 # Category A: Offline Tests (no network required)
 #=============================================================================
@@ -944,6 +958,374 @@ test_real_terminal_notifier_macos() {
 }
 
 #=============================================================================
+# Category D: Hook Wrapper Tests (Offline)
+#=============================================================================
+
+test_hook_wrapper_exists() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_exists${NC}"
+
+    assert_file_exists "$SCRIPT_DIR/hook-wrapper.sh" "hook-wrapper.sh exists"
+}
+
+test_hook_wrapper_is_executable() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_is_executable${NC}"
+
+    assert_executable "$SCRIPT_DIR/hook-wrapper.sh" "hook-wrapper.sh is executable"
+}
+
+test_hook_wrapper_posix_syntax() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_posix_syntax${NC}"
+
+    # Check that wrapper uses #!/bin/sh (POSIX), not #!/bin/bash
+    first_line=$(head -n1 "$SCRIPT_DIR/hook-wrapper.sh")
+    if echo "$first_line" | grep -q "#!/bin/sh"; then
+        pass_test "Wrapper uses POSIX #!/bin/sh shebang"
+    else
+        fail_test "Wrapper uses POSIX #!/bin/sh shebang" "Found: $first_line"
+    fi
+}
+
+test_hook_wrapper_no_bashisms() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_no_bashisms${NC}"
+
+    # Check for common bash-only features that break POSIX sh
+    if grep -E '\[\[|\$\{[^}]+:|\bfunction\b|\bsource\b' "$SCRIPT_DIR/hook-wrapper.sh" >/dev/null 2>&1; then
+        fail_test "No bashisms in wrapper" "Found bash-specific syntax"
+    else
+        pass_test "No bashisms in wrapper"
+    fi
+}
+
+test_hook_wrapper_graceful_no_install_script() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_graceful_no_install_script${NC}"
+
+    setup_test_dir
+
+    # Copy wrapper only (no install.sh, no binary)
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+
+    # Run wrapper - should exit gracefully (exit 0)
+    output=$(echo '{"session_id":"test","transcript_path":"","cwd":"/tmp"}' | \
+        sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop 2>&1)
+    exit_code=$?
+
+    assert_exit_code 0 $exit_code "Wrapper exits gracefully when install.sh missing"
+
+    cleanup_test_dir
+}
+
+test_hook_wrapper_graceful_download_fail() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_graceful_download_fail${NC}"
+
+    setup_test_dir
+
+    # Copy wrapper and install script
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+    cp "$SCRIPT_DIR/install.sh" "$TEST_DIR/"
+
+    # Run with invalid URL - should exit gracefully
+    output=$(echo '{"session_id":"test","transcript_path":"","cwd":"/tmp"}' | \
+        RELEASE_URL="http://127.0.0.1:1" sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop 2>&1)
+    exit_code=$?
+
+    assert_exit_code 0 $exit_code "Wrapper exits gracefully when download fails"
+
+    cleanup_test_dir
+}
+
+test_hook_wrapper_detects_platform() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_detects_platform${NC}"
+
+    # Verify wrapper contains platform detection logic
+    if grep -q 'MINGW\|MSYS\|CYGWIN' "$SCRIPT_DIR/hook-wrapper.sh"; then
+        pass_test "Wrapper has Windows platform detection"
+    else
+        fail_test "Wrapper has Windows platform detection" "Missing MINGW/MSYS/CYGWIN check"
+    fi
+}
+
+test_hook_wrapper_path_with_spaces() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_path_with_spaces${NC}"
+
+    # Create test dir with spaces
+    TEST_DIR_SPACES=$(mktemp -d)/path\ with\ spaces
+    mkdir -p "$TEST_DIR_SPACES"
+
+    # Copy wrapper
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR_SPACES/"
+
+    # Run wrapper - should handle spaces correctly
+    output=$(echo '{"session_id":"test","transcript_path":"","cwd":"/tmp"}' | \
+        sh "$TEST_DIR_SPACES/hook-wrapper.sh" handle-hook Stop 2>&1)
+    exit_code=$?
+
+    assert_exit_code 0 $exit_code "Wrapper handles paths with spaces"
+
+    rm -rf "$(dirname "$TEST_DIR_SPACES")"
+}
+
+test_hook_wrapper_passes_all_arguments() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_passes_all_arguments${NC}"
+
+    setup_test_dir
+
+    # Create a mock binary that echoes arguments
+    cat > "$TEST_DIR/claude-notifications" << 'MOCK_EOF'
+#!/bin/sh
+echo "ARGS:$*"
+MOCK_EOF
+    chmod +x "$TEST_DIR/claude-notifications"
+
+    # Copy wrapper
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+
+    # Run wrapper with multiple arguments
+    output=$(echo '{}' | sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop --extra-arg 2>&1)
+
+    if echo "$output" | grep -q "ARGS:handle-hook Stop --extra-arg"; then
+        pass_test "Wrapper passes all arguments to binary"
+    else
+        fail_test "Wrapper passes all arguments to binary" "Got: $output"
+    fi
+
+    cleanup_test_dir
+}
+
+test_hook_wrapper_exec_replaces_process() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_exec_replaces_process${NC}"
+
+    # Verify wrapper uses 'exec' for process replacement
+    if grep -q 'exec "\$BINARY"' "$SCRIPT_DIR/hook-wrapper.sh"; then
+        pass_test "Wrapper uses exec for process replacement"
+    else
+        fail_test "Wrapper uses exec for process replacement" "Missing 'exec' call"
+    fi
+}
+
+test_hook_wrapper_silent_install() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_silent_install${NC}"
+
+    # Verify install.sh output is redirected to /dev/null
+    if grep -q 'install.sh.*>/dev/null 2>&1' "$SCRIPT_DIR/hook-wrapper.sh"; then
+        pass_test "Wrapper runs install.sh silently"
+    else
+        fail_test "Wrapper runs install.sh silently" "Missing output redirection"
+    fi
+}
+
+test_hook_wrapper_install_non_blocking() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_install_non_blocking${NC}"
+
+    # Verify install.sh failure doesn't block (|| true)
+    if grep -q 'install.sh.*|| true' "$SCRIPT_DIR/hook-wrapper.sh"; then
+        pass_test "Wrapper handles install.sh failure gracefully"
+    else
+        fail_test "Wrapper handles install.sh failure gracefully" "Missing '|| true'"
+    fi
+}
+
+#=============================================================================
+# Category E: Hook Wrapper Tests (Mock Server)
+#=============================================================================
+
+test_hook_wrapper_mock_download() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_mock_download${NC}"
+
+    if ! command -v python3 &>/dev/null; then
+        skip_test "Hook wrapper mock download" "python3 not available"
+        return
+    fi
+
+    setup_test_dir
+    start_mock_server $MOCK_PORT
+
+    if [ -z "$MOCK_PID" ]; then
+        skip_test "Hook wrapper mock download" "Mock server failed to start"
+        return
+    fi
+
+    # Create platform-specific mock binary (same as test_mock_download_success)
+    local binary_name=$(get_binary_name)
+    cp "$FIXTURES_DIR/mock_binary" "$FIXTURES_DIR/$binary_name"
+
+    # Update checksums
+    local checksum
+    if command -v shasum &>/dev/null; then
+        checksum=$(shasum -a 256 "$FIXTURES_DIR/$binary_name" | awk '{print $1}')
+    else
+        checksum=$(sha256sum "$FIXTURES_DIR/$binary_name" | awk '{print $1}')
+    fi
+    echo "$checksum  $binary_name" > "$FIXTURES_DIR/checksums.txt"
+
+    # Copy wrapper and install script
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+    cp "$SCRIPT_DIR/install.sh" "$TEST_DIR/"
+    chmod +x "$TEST_DIR/hook-wrapper.sh" "$TEST_DIR/install.sh"
+
+    # Run wrapper with mock server URL
+    output=$(echo '{"session_id":"test","transcript_path":"","cwd":"/tmp"}' | \
+        RELEASE_URL="http://localhost:$MOCK_PORT" \
+        CHECKSUMS_URL="http://localhost:$MOCK_PORT/checksums.txt" \
+        sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop 2>&1) || true
+
+    # Cleanup mock files
+    rm -f "$FIXTURES_DIR/$binary_name"
+
+    stop_mock_server
+
+    # Check binary was downloaded
+    if is_windows; then
+        assert_file_exists "$TEST_DIR/claude-notifications.bat" "Binary downloaded via wrapper (mock)"
+    else
+        assert_file_exists "$TEST_DIR/claude-notifications" "Binary downloaded via wrapper (mock)"
+    fi
+
+    cleanup_test_dir
+}
+
+#=============================================================================
+# Category F: Hook Wrapper Tests (Real Network)
+#=============================================================================
+
+test_hook_wrapper_real_download() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_real_download${NC}"
+
+    if [ "$RUN_REAL_NETWORK" != true ]; then
+        skip_test "Hook wrapper real download" "--real-network not specified"
+        return
+    fi
+
+    setup_test_dir
+
+    # Copy wrapper and install script (but NOT binary)
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+    cp "$SCRIPT_DIR/install.sh" "$TEST_DIR/"
+
+    # Run wrapper - should auto-download binary
+    output=$(echo '{"session_id":"test","transcript_path":"","cwd":"/tmp"}' | \
+        sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop 2>&1) || true
+
+    # Check binary was downloaded
+    if is_windows; then
+        assert_file_exists "$TEST_DIR/claude-notifications.bat" "Binary downloaded via wrapper"
+    else
+        assert_file_exists "$TEST_DIR/claude-notifications" "Binary downloaded via wrapper"
+    fi
+
+    cleanup_test_dir
+}
+
+test_hook_wrapper_real_no_redownload() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_real_no_redownload${NC}"
+
+    if [ "$RUN_REAL_NETWORK" != true ]; then
+        skip_test "Hook wrapper no re-download" "--real-network not specified"
+        return
+    fi
+
+    setup_test_dir
+
+    # First install binary normally
+    INSTALL_TARGET_DIR="$TEST_DIR" bash "$INSTALL_SCRIPT" 2>&1 || true
+
+    # Copy wrapper
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+
+    # Get binary modification time
+    if is_windows; then
+        BINARY="$TEST_DIR/claude-notifications.bat"
+    else
+        BINARY="$TEST_DIR/claude-notifications"
+    fi
+    mtime_before=$(stat -c %Y "$BINARY" 2>/dev/null || stat -f %m "$BINARY" 2>/dev/null)
+
+    # Small sleep to ensure mtime would change if re-downloaded
+    sleep 1
+
+    # Run wrapper
+    output=$(echo '{"session_id":"test","transcript_path":"","cwd":"/tmp"}' | \
+        sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop 2>&1) || true
+
+    # Binary should NOT be re-downloaded (same mtime)
+    mtime_after=$(stat -c %Y "$BINARY" 2>/dev/null || stat -f %m "$BINARY" 2>/dev/null)
+
+    if [ "$mtime_before" = "$mtime_after" ]; then
+        pass_test "Existing binary not re-downloaded"
+    else
+        fail_test "Existing binary not re-downloaded" "mtime changed: $mtime_before -> $mtime_after"
+    fi
+
+    cleanup_test_dir
+}
+
+test_hook_wrapper_real_binary_runs() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_real_binary_runs${NC}"
+
+    if [ "$RUN_REAL_NETWORK" != true ]; then
+        skip_test "Hook wrapper binary runs" "--real-network not specified"
+        return
+    fi
+
+    setup_test_dir
+
+    # Copy wrapper and install script
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+    cp "$SCRIPT_DIR/install.sh" "$TEST_DIR/"
+
+    # Run wrapper with --version to verify binary actually executes
+    output=$(sh "$TEST_DIR/hook-wrapper.sh" --version 2>&1) || true
+
+    if echo "$output" | grep -qE "claude-notifications|[0-9]+\.[0-9]+\.[0-9]+"; then
+        pass_test "Binary executes via wrapper"
+    else
+        fail_test "Binary executes via wrapper" "Output: $output"
+    fi
+
+    cleanup_test_dir
+}
+
+test_hook_wrapper_real_concurrent_calls() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_real_concurrent_calls${NC}"
+
+    if [ "$RUN_REAL_NETWORK" != true ]; then
+        skip_test "Hook wrapper concurrent calls" "--real-network not specified"
+        return
+    fi
+
+    setup_test_dir
+
+    # Copy wrapper and install script
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$TEST_DIR/"
+    cp "$SCRIPT_DIR/install.sh" "$TEST_DIR/"
+
+    # Run 3 concurrent wrapper calls
+    (echo '{}' | sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop >/dev/null 2>&1) &
+    pid1=$!
+    (echo '{}' | sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop >/dev/null 2>&1) &
+    pid2=$!
+    (echo '{}' | sh "$TEST_DIR/hook-wrapper.sh" handle-hook Stop >/dev/null 2>&1) &
+    pid3=$!
+
+    # Wait for all to complete
+    wait $pid1 $pid2 $pid3
+
+    # Verify binary exists and is not corrupted
+    if is_windows; then
+        BINARY="$TEST_DIR/claude-notifications.bat"
+    else
+        BINARY="$TEST_DIR/claude-notifications"
+    fi
+
+    if [ -x "$BINARY" ]; then
+        pass_test "Concurrent calls don't corrupt installation"
+    else
+        fail_test "Concurrent calls don't corrupt installation" "Binary missing or not executable"
+    fi
+
+    cleanup_test_dir
+}
+
+#=============================================================================
 # Main
 #=============================================================================
 
@@ -996,6 +1378,39 @@ main() {
         test_real_binary_runs
         test_real_utilities_installed
         test_real_terminal_notifier_macos
+    fi
+
+    if [ "$RUN_MOCK_ONLY" != true ]; then
+        # Category D: Hook Wrapper Tests (Offline)
+        echo ""
+        echo -e "${BOLD}Category D: Hook Wrapper Tests (Offline)${NC}"
+        test_hook_wrapper_exists
+        test_hook_wrapper_is_executable
+        test_hook_wrapper_posix_syntax
+        test_hook_wrapper_no_bashisms
+        test_hook_wrapper_graceful_no_install_script
+        test_hook_wrapper_graceful_download_fail
+        test_hook_wrapper_detects_platform
+        test_hook_wrapper_path_with_spaces
+        test_hook_wrapper_passes_all_arguments
+        test_hook_wrapper_exec_replaces_process
+        test_hook_wrapper_silent_install
+        test_hook_wrapper_install_non_blocking
+    fi
+
+    # Category E: Hook Wrapper Tests (Mock Server)
+    echo ""
+    echo -e "${BOLD}Category E: Hook Wrapper Tests (Mock Server)${NC}"
+    test_hook_wrapper_mock_download
+
+    if [ "$RUN_MOCK_ONLY" != true ]; then
+        # Category F: Hook Wrapper Tests (Real Network)
+        echo ""
+        echo -e "${BOLD}Category F: Hook Wrapper Tests (Real Network)${NC}"
+        test_hook_wrapper_real_download
+        test_hook_wrapper_real_no_redownload
+        test_hook_wrapper_real_binary_runs
+        test_hook_wrapper_real_concurrent_calls
     fi
 
     # Summary
