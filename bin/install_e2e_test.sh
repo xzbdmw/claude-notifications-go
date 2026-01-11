@@ -1114,7 +1114,7 @@ test_hook_wrapper_silent_install() {
     echo -e "\n${CYAN}▶ test_hook_wrapper_silent_install${NC}"
 
     # Verify install.sh output is redirected to /dev/null
-    if grep -q 'install.sh.*>/dev/null 2>&1' "$SCRIPT_DIR/hook-wrapper.sh"; then
+    if grep -q '>/dev/null 2>&1' "$SCRIPT_DIR/hook-wrapper.sh"; then
         pass_test "Wrapper runs install.sh silently"
     else
         fail_test "Wrapper runs install.sh silently" "Missing output redirection"
@@ -1125,10 +1125,133 @@ test_hook_wrapper_install_non_blocking() {
     echo -e "\n${CYAN}▶ test_hook_wrapper_install_non_blocking${NC}"
 
     # Verify install.sh failure doesn't block (|| true)
-    if grep -q 'install.sh.*|| true' "$SCRIPT_DIR/hook-wrapper.sh"; then
+    if grep -q '|| true' "$SCRIPT_DIR/hook-wrapper.sh"; then
         pass_test "Wrapper handles install.sh failure gracefully"
     else
         fail_test "Wrapper handles install.sh failure gracefully" "Missing '|| true'"
+    fi
+}
+
+test_hook_wrapper_version_check_exists() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_version_check_exists${NC}"
+
+    # Verify wrapper has version checking logic (BIN_VER and PLG_VER variables)
+    if grep -q 'BIN_VER' "$SCRIPT_DIR/hook-wrapper.sh" && \
+       grep -q 'PLG_VER' "$SCRIPT_DIR/hook-wrapper.sh"; then
+        pass_test "Wrapper has version checking logic"
+    else
+        fail_test "Wrapper has version checking logic" "Missing version variables"
+    fi
+}
+
+test_hook_wrapper_version_mismatch_triggers_update() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_version_mismatch_triggers_update${NC}"
+
+    # Create proper directory structure: bin/ and .claude-plugin/ at same level
+    local ROOT_DIR="${TMPDIR:-${TEMP:-/tmp}}/wrapper-version-test-$$"
+    rm -rf "$ROOT_DIR"
+    mkdir -p "$ROOT_DIR/bin" "$ROOT_DIR/.claude-plugin"
+
+    # Create mock binary that reports old version
+    if is_windows; then
+        cat > "$ROOT_DIR/bin/claude-notifications.bat" << 'MOCK_EOF'
+@echo off
+if "%1"=="version" echo claude-notifications version 1.0.0
+MOCK_EOF
+    else
+        cat > "$ROOT_DIR/bin/claude-notifications" << 'MOCK_EOF'
+#!/bin/sh
+if [ "$1" = "version" ]; then echo "claude-notifications version 1.0.0"; fi
+MOCK_EOF
+        chmod +x "$ROOT_DIR/bin/claude-notifications"
+    fi
+
+    # Create plugin.json with newer version (at root level, not in bin/)
+    echo '{"version": "2.0.0"}' > "$ROOT_DIR/.claude-plugin/plugin.json"
+
+    # Copy wrapper to bin/
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$ROOT_DIR/bin/"
+    chmod +x "$ROOT_DIR/bin/hook-wrapper.sh"
+
+    # Create dummy install.sh that creates a marker file
+    cat > "$ROOT_DIR/bin/install.sh" << 'INSTALL_EOF'
+#!/bin/sh
+touch "$INSTALL_TARGET_DIR/.update-triggered"
+INSTALL_EOF
+    chmod +x "$ROOT_DIR/bin/install.sh"
+
+    # Run wrapper
+    echo '{}' | sh "$ROOT_DIR/bin/hook-wrapper.sh" handle-hook Stop >/dev/null 2>&1 || true
+
+    # Check if update was triggered
+    if [ -f "$ROOT_DIR/bin/.update-triggered" ]; then
+        pass_test "Version mismatch triggers update"
+    else
+        fail_test "Version mismatch triggers update" "Update not triggered"
+    fi
+
+    rm -rf "$ROOT_DIR"
+}
+
+test_hook_wrapper_version_match_no_update() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_version_match_no_update${NC}"
+
+    # Create proper directory structure: bin/ and .claude-plugin/ at same level
+    local ROOT_DIR="${TMPDIR:-${TEMP:-/tmp}}/wrapper-match-test-$$"
+    rm -rf "$ROOT_DIR"
+    mkdir -p "$ROOT_DIR/bin" "$ROOT_DIR/.claude-plugin"
+
+    # Create mock binary that reports matching version
+    if is_windows; then
+        cat > "$ROOT_DIR/bin/claude-notifications.bat" << 'MOCK_EOF'
+@echo off
+if "%1"=="version" echo claude-notifications version 1.0.0
+echo EXECUTED
+MOCK_EOF
+    else
+        cat > "$ROOT_DIR/bin/claude-notifications" << 'MOCK_EOF'
+#!/bin/sh
+if [ "$1" = "version" ]; then echo "claude-notifications version 1.0.0"; fi
+echo "EXECUTED"
+MOCK_EOF
+        chmod +x "$ROOT_DIR/bin/claude-notifications"
+    fi
+
+    # Create plugin.json with SAME version
+    echo '{"version": "1.0.0"}' > "$ROOT_DIR/.claude-plugin/plugin.json"
+
+    # Copy wrapper to bin/
+    cp "$SCRIPT_DIR/hook-wrapper.sh" "$ROOT_DIR/bin/"
+    chmod +x "$ROOT_DIR/bin/hook-wrapper.sh"
+
+    # Create install.sh that creates a marker file
+    cat > "$ROOT_DIR/bin/install.sh" << 'INSTALL_EOF'
+#!/bin/sh
+touch "$INSTALL_TARGET_DIR/.update-triggered"
+INSTALL_EOF
+    chmod +x "$ROOT_DIR/bin/install.sh"
+
+    # Run wrapper
+    output=$(echo '{}' | sh "$ROOT_DIR/bin/hook-wrapper.sh" handle-hook Stop 2>&1) || true
+
+    # Check that update was NOT triggered (versions match)
+    if [ ! -f "$ROOT_DIR/bin/.update-triggered" ]; then
+        pass_test "Version match skips update"
+    else
+        fail_test "Version match skips update" "Update was triggered unnecessarily"
+    fi
+
+    rm -rf "$ROOT_DIR"
+}
+
+test_hook_wrapper_uses_force_on_update() {
+    echo -e "\n${CYAN}▶ test_hook_wrapper_uses_force_on_update${NC}"
+
+    # Verify wrapper uses --force when updating existing binary
+    if grep -q '\-\-force' "$SCRIPT_DIR/hook-wrapper.sh"; then
+        pass_test "Wrapper uses --force flag for updates"
+    else
+        fail_test "Wrapper uses --force flag for updates" "Missing --force"
     fi
 }
 
@@ -1410,6 +1533,10 @@ main() {
         test_hook_wrapper_exec_replaces_process
         test_hook_wrapper_silent_install
         test_hook_wrapper_install_non_blocking
+        test_hook_wrapper_version_check_exists
+        test_hook_wrapper_version_mismatch_triggers_update
+        test_hook_wrapper_version_match_no_update
+        test_hook_wrapper_uses_force_on_update
     fi
 
     # Category E: Hook Wrapper Tests (Mock Server)

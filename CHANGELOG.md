@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-01-11
+
+### Added
+- **Automatic version-aware updates** - wrapper now checks if binary version matches plugin version
+  - After Claude auto-updates plugin files, binary is automatically updated on next hook call
+  - Compares `claude-notifications version` output with `plugin.json` version
+  - Uses `--force` flag to replace outdated binaries
+  - Fallback: if version check fails, still works based on file existence
+
+### Technical
+- Added version comparison logic to `hook-wrapper.sh`
+- 4 new E2E tests for version checking (mismatch triggers update, match skips update, etc.)
+
 ## [1.11.0] - 2026-01-11
 
 ### Added
