@@ -196,39 +196,6 @@ func TestSendDesktop_WithTerminalBundleIDOverride(t *testing.T) {
 	_ = err // Error acceptable in CI
 }
 
-func TestPlaySoundAsync_Disabled(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Notifications.Desktop.Sound = false
-
-	n := New(cfg)
-
-	// Should not start any goroutine when sound is disabled
-	n.playSoundAsync("")
-	n.playSoundAsync("nonexistent.mp3")
-
-	// Close should complete quickly since no sound was playing
-	err := n.Close()
-	if err != nil {
-		t.Errorf("Close() returned error: %v", err)
-	}
-}
-
-func TestPlaySoundAsync_EmptyPath(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Notifications.Desktop.Sound = true
-
-	n := New(cfg)
-
-	// Empty sound path should not start playback
-	n.playSoundAsync("")
-
-	// Close should complete quickly
-	err := n.Close()
-	if err != nil {
-		t.Errorf("Close() returned error: %v", err)
-	}
-}
-
 func TestSendWithBeeep_RestoresAppName(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.Notifications.Desktop.Sound = false
@@ -241,7 +208,7 @@ func TestSendWithBeeep_RestoresAppName(t *testing.T) {
 	beeep.AppName = testAppName
 
 	// Call sendWithBeeep
-	_ = n.sendWithBeeep("Test Title", "Test Message", "", "")
+	_ = n.sendWithBeeep("Test Title", "Test Message", "")
 
 	// AppName should be restored
 	if beeep.AppName != testAppName {
@@ -482,19 +449,6 @@ func TestExtractSessionInfo_MoreCases(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestPlaySoundAsync_WithSoundFile(t *testing.T) {
-	cfg := config.DefaultConfig()
-	cfg.Notifications.Desktop.Sound = true
-
-	n := New(cfg)
-
-	// Playing nonexistent sound should not panic
-	n.playSoundAsync("/nonexistent/path/to/sound.mp3")
-
-	// Wait for goroutine to complete
-	n.Close()
 }
 
 func TestSendDesktop_ClickToFocusWithBeeepFallback(t *testing.T) {
@@ -1003,7 +957,7 @@ func TestSendWithOSC9_Basic(t *testing.T) {
 	n := New(cfg)
 
 	// This will likely fail in CI due to no /dev/tty, but should not panic
-	err := n.sendWithOSC9("Test Title", "Test Message", "")
+	err := n.sendWithOSC9("Test Title", "Test Message")
 	// Error expected in CI
 	_ = err
 }
@@ -1019,7 +973,7 @@ func TestSendWithOSC9_LongMessageTruncation(t *testing.T) {
 	longMessage := strings.Repeat("This is a long message. ", 50) // ~1200 chars
 
 	// Should not panic even with very long message
-	err := n.sendWithOSC9(longTitle, longMessage, "")
+	err := n.sendWithOSC9(longTitle, longMessage)
 	// Error expected in CI (no tty)
 	_ = err
 }
@@ -1031,7 +985,7 @@ func TestSendWithOSC9_EmptyMessage(t *testing.T) {
 	n := New(cfg)
 
 	// Empty message - should just show title
-	err := n.sendWithOSC9("Title Only", "", "")
+	err := n.sendWithOSC9("Title Only", "")
 	// Error expected in CI
 	_ = err
 }
@@ -1043,7 +997,7 @@ func TestSendWithOSC9_SpecialCharacters(t *testing.T) {
 	n := New(cfg)
 
 	// Message with special characters that might affect escape sequences
-	err := n.sendWithOSC9("Title", "Message with \\ backslash and \" quotes", "")
+	err := n.sendWithOSC9("Title", "Message with \\ backslash and \" quotes")
 	// Error expected in CI
 	_ = err
 }
@@ -1055,7 +1009,7 @@ func TestSendWithOSC9_Unicode(t *testing.T) {
 	n := New(cfg)
 
 	// Unicode message
-	err := n.sendWithOSC9("✅ Task Complete", "日本語 中文 🎉 émojis", "")
+	err := n.sendWithOSC9("✅ Task Complete", "日本語 中文 🎉 émojis")
 	// Error expected in CI
 	_ = err
 }

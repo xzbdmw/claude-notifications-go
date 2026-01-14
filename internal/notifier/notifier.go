@@ -5,28 +5,19 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/gen2brain/beeep"
 
 	"github.com/777genius/claude-notifications/internal/analyzer"
-	"github.com/777genius/claude-notifications/internal/audio"
 	"github.com/777genius/claude-notifications/internal/config"
-	"github.com/777genius/claude-notifications/internal/errorhandler"
 	"github.com/777genius/claude-notifications/internal/logging"
 	"github.com/777genius/claude-notifications/internal/platform"
 )
 
 // Notifier sends desktop notifications
 type Notifier struct {
-	cfg         *config.Config
-	audioPlayer *audio.Player
-	playerInit  sync.Once
-	playerErr   error
-	mu          sync.Mutex
-	wg          sync.WaitGroup
-	closing     bool // Prevents new sounds from being enqueued after Close() is called
+	cfg *config.Config
 }
 
 // New creates a new notifier
@@ -78,24 +69,23 @@ func (n *Notifier) SendDesktop(status analyzer.Status, message string) error {
 	switch method {
 	case "osc9":
 		// OSC9: Terminal escape sequence notification (iTerm2, kitty, etc.)
-		return n.sendWithOSC9(title, cleanMessage, statusInfo.Sound)
+		return n.sendWithOSC9(title, cleanMessage)
 
 	case "terminal-notifier":
 		// terminal-notifier: macOS only with click-to-focus
 		if platform.IsMacOS() && IsTerminalNotifierAvailable() {
 			if err := n.sendWithTerminalNotifier(title, cleanMessage); err != nil {
 				logging.Warn("terminal-notifier failed, falling back to beeep: %v", err)
-				return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+				return n.sendWithBeeep(title, cleanMessage, appIcon)
 			}
-			n.playSoundAsync(statusInfo.Sound)
 			return nil
 		}
 		logging.Debug("terminal-notifier not available or not on macOS, falling back to beeep")
-		return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+		return n.sendWithBeeep(title, cleanMessage, appIcon)
 
 	case "beeep":
 		// beeep: Cross-platform desktop notifications
-		return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+		return n.sendWithBeeep(title, cleanMessage, appIcon)
 
 	default:
 		// "auto" or "": Use smart defaults
@@ -107,7 +97,6 @@ func (n *Notifier) SendDesktop(status analyzer.Status, message string) error {
 					// Fall through to beeep
 				} else {
 					logging.Debug("Desktop notification sent via terminal-notifier: title=%s", title)
-					n.playSoundAsync(statusInfo.Sound)
 					return nil
 				}
 			} else {
@@ -116,7 +105,7 @@ func (n *Notifier) SendDesktop(status analyzer.Status, message string) error {
 		}
 
 		// Standard path: beeep (Windows, Linux, macOS fallback)
-		return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+		return n.sendWithBeeep(title, cleanMessage, appIcon)
 	}
 }
 
@@ -161,7 +150,7 @@ func buildTerminalNotifierArgs(title, message, bundleID string) []string {
 }
 
 // sendWithBeeep sends notification via beeep (cross-platform)
-func (n *Notifier) sendWithBeeep(title, message, appIcon, sound string) error {
+func (n *Notifier) sendWithBeeep(title, message, appIcon string) error {
 	// Platform-specific AppName handling:
 	// - Windows: Use fixed AppName to prevent registry pollution. Each unique AppName
 	//   creates a persistent entry in HKEY_CURRENT_USER\SOFTWARE\Microsoft\Windows\
@@ -186,15 +175,13 @@ func (n *Notifier) sendWithBeeep(title, message, appIcon, sound string) error {
 	}
 
 	logging.Debug("Desktop notification sent via beeep: title=%s", title)
-
-	n.playSoundAsync(sound)
 	return nil
 }
 
 // sendWithOSC9 sends notification via OSC9 escape sequence
 // OSC9 is supported by terminals like iTerm2, kitty, and others
 // Format: ESC ] 9 ; message BEL or ESC ] 9 ; message ESC \
-func (n *Notifier) sendWithOSC9(title, message, sound string) error {
+func (n *Notifier) sendWithOSC9(title, message string) error {
 	// Combine title and message for OSC9
 	notifyText := title
 	if message != "" {
@@ -223,101 +210,11 @@ func (n *Notifier) sendWithOSC9(title, message, sound string) error {
 	}
 
 	logging.Debug("Desktop notification sent via OSC9: title=%s", title)
-
-	n.playSoundAsync(sound)
 	return nil
 }
 
-// playSoundAsync plays sound asynchronously if enabled
-func (n *Notifier) playSoundAsync(sound string) {
-	if n.cfg.Notifications.Desktop.Sound && sound != "" {
-		// Check if notifier is closing to prevent WaitGroup race
-		n.mu.Lock()
-		if n.closing {
-			n.mu.Unlock()
-			logging.Debug("Skipping sound playback: notifier is closing")
-			return
-		}
-		n.wg.Add(1)
-		n.mu.Unlock()
-
-		// Use SafeGo to protect against panics in sound playback goroutine
-		errorhandler.SafeGo(func() {
-			defer n.wg.Done()
-			n.playSound(sound)
-		})
-	}
-}
-
-// initPlayer initializes the audio player once
-func (n *Notifier) initPlayer() error {
-	n.playerInit.Do(func() {
-		deviceName := n.cfg.Notifications.Desktop.AudioDevice
-		volume := n.cfg.Notifications.Desktop.Volume
-
-		player, err := audio.NewPlayer(deviceName, volume)
-		if err != nil {
-			n.playerErr = err
-			logging.Error("Failed to initialize audio player: %v", err)
-			return
-		}
-
-		n.audioPlayer = player
-
-		if deviceName != "" {
-			logging.Debug("Audio player initialized with device: %s, volume: %.0f%%", deviceName, volume*100)
-		} else {
-			logging.Debug("Audio player initialized with default device, volume: %.0f%%", volume*100)
-		}
-	})
-
-	return n.playerErr
-}
-
-// playSound plays a sound file using the audio module
-func (n *Notifier) playSound(soundPath string) {
-	if !platform.FileExists(soundPath) {
-		logging.Warn("Sound file not found: %s", soundPath)
-		return
-	}
-
-	// Initialize player once
-	if err := n.initPlayer(); err != nil {
-		logging.Error("Failed to initialize audio player: %v", err)
-		return
-	}
-
-	// Play sound
-	if err := n.audioPlayer.Play(soundPath); err != nil {
-		logging.Error("Failed to play sound %s: %v", soundPath, err)
-		return
-	}
-
-	volume := n.cfg.Notifications.Desktop.Volume
-	logging.Debug("Sound played successfully: %s (volume: %.0f%%)", soundPath, volume*100)
-}
-
-// Close waits for all sounds to finish playing and cleans up resources
+// Close is a no-op (kept for interface compatibility)
 func (n *Notifier) Close() error {
-	// Set closing flag to prevent new sounds from being enqueued
-	n.mu.Lock()
-	n.closing = true
-	n.mu.Unlock()
-
-	// Wait for all sounds to finish
-	n.wg.Wait()
-
-	// Close audio player if it was initialized
-	n.mu.Lock()
-	if n.audioPlayer != nil {
-		if err := n.audioPlayer.Close(); err != nil {
-			logging.Warn("Failed to close audio player: %v", err)
-		}
-		n.audioPlayer = nil
-		logging.Debug("Audio player closed")
-	}
-	n.mu.Unlock()
-
 	return nil
 }
 
