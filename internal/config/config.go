@@ -28,6 +28,7 @@ type NotificationsConfig struct {
 // DesktopConfig represents desktop notification settings
 type DesktopConfig struct {
 	Enabled          bool    `json:"enabled"`
+	Method           string  `json:"method"`           // Notification method: "auto", "osc9", "terminal-notifier", "beeep" (default: "auto")
 	Sound            bool    `json:"sound"`
 	Volume           float64 `json:"volume"`           // Volume level 0.0-1.0, default 1.0 (full volume)
 	AudioDevice      string  `json:"audioDevice"`      // Audio output device name (empty = system default)
@@ -234,6 +235,18 @@ func (c *Config) ApplyDefaults() {
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
+	// Validate notification method
+	validMethods := map[string]bool{
+		"":                   true, // empty means auto
+		"auto":               true,
+		"osc9":               true,
+		"terminal-notifier":  true,
+		"beeep":              true,
+	}
+	if !validMethods[c.Notifications.Desktop.Method] {
+		return fmt.Errorf("invalid notification method: %s (must be one of: auto, osc9, terminal-notifier, beeep)", c.Notifications.Desktop.Method)
+	}
+
 	// Validate volume
 	if c.Notifications.Desktop.Volume < 0.0 || c.Notifications.Desktop.Volume > 1.0 {
 		return fmt.Errorf("desktop volume must be between 0.0 and 1.0 (got %.2f)", c.Notifications.Desktop.Volume)

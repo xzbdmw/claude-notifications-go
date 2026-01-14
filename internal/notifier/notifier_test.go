@@ -951,3 +951,172 @@ func TestBuildTerminalNotifierArgs_AllKnownBundleIDs(t *testing.T) {
 		}
 	}
 }
+
+// === Tests for OSC9 notification method ===
+
+func TestSendDesktop_OSC9Method(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Enabled = true
+	cfg.Notifications.Desktop.Method = "osc9"
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// OSC9 requires /dev/tty which may not be available in CI
+	// We just verify it doesn't panic and handles errors gracefully
+	err := n.SendDesktop(analyzer.StatusTaskComplete, "[test-session] OSC9 test")
+	// Error is expected in CI (no tty)
+	_ = err
+}
+
+func TestSendDesktop_OSC9MethodWithAllStatuses(t *testing.T) {
+	statuses := []analyzer.Status{
+		analyzer.StatusTaskComplete,
+		analyzer.StatusReviewComplete,
+		analyzer.StatusQuestion,
+		analyzer.StatusPlanReady,
+		analyzer.StatusSessionLimitReached,
+		analyzer.StatusAPIError,
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Enabled = true
+	cfg.Notifications.Desktop.Method = "osc9"
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	for _, status := range statuses {
+		t.Run(string(status), func(t *testing.T) {
+			// Should not panic for any status
+			err := n.SendDesktop(status, "[osc9-test] "+string(status))
+			// Error acceptable (no tty in CI)
+			_ = err
+		})
+	}
+}
+
+func TestSendWithOSC9_Basic(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// This will likely fail in CI due to no /dev/tty, but should not panic
+	err := n.sendWithOSC9("Test Title", "Test Message", "")
+	// Error expected in CI
+	_ = err
+}
+
+func TestSendWithOSC9_LongMessageTruncation(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Create a very long message (> 200 chars)
+	longTitle := "Long Title"
+	longMessage := strings.Repeat("This is a long message. ", 50) // ~1200 chars
+
+	// Should not panic even with very long message
+	err := n.sendWithOSC9(longTitle, longMessage, "")
+	// Error expected in CI (no tty)
+	_ = err
+}
+
+func TestSendWithOSC9_EmptyMessage(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Empty message - should just show title
+	err := n.sendWithOSC9("Title Only", "", "")
+	// Error expected in CI
+	_ = err
+}
+
+func TestSendWithOSC9_SpecialCharacters(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Message with special characters that might affect escape sequences
+	err := n.sendWithOSC9("Title", "Message with \\ backslash and \" quotes", "")
+	// Error expected in CI
+	_ = err
+}
+
+func TestSendWithOSC9_Unicode(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Unicode message
+	err := n.sendWithOSC9("✅ Task Complete", "日本語 中文 🎉 émojis", "")
+	// Error expected in CI
+	_ = err
+}
+
+func TestSendDesktop_MethodBeeep(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Enabled = true
+	cfg.Notifications.Desktop.Method = "beeep"
+	cfg.Notifications.Desktop.Sound = false
+	cfg.Notifications.Desktop.ClickToFocus = true // Should be ignored with explicit beeep
+
+	n := New(cfg)
+
+	// Should use beeep regardless of ClickToFocus setting
+	err := n.SendDesktop(analyzer.StatusTaskComplete, "[test] Beeep method test")
+	// Error acceptable in CI
+	_ = err
+}
+
+func TestSendDesktop_MethodTerminalNotifier(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Skipping macOS-only test")
+	}
+
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Enabled = true
+	cfg.Notifications.Desktop.Method = "terminal-notifier"
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Should try terminal-notifier first, fallback to beeep if not available
+	err := n.SendDesktop(analyzer.StatusTaskComplete, "[test] terminal-notifier method test")
+	// Error acceptable
+	_ = err
+}
+
+func TestSendDesktop_MethodAuto(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Enabled = true
+	cfg.Notifications.Desktop.Method = "auto"
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Auto should use the same logic as empty method
+	err := n.SendDesktop(analyzer.StatusTaskComplete, "[test] Auto method test")
+	// Error acceptable in CI
+	_ = err
+}
+
+func TestSendDesktop_MethodEmpty(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.Notifications.Desktop.Enabled = true
+	cfg.Notifications.Desktop.Method = "" // Empty = auto
+	cfg.Notifications.Desktop.Sound = false
+
+	n := New(cfg)
+
+	// Empty method should behave like auto
+	err := n.SendDesktop(analyzer.StatusTaskComplete, "[test] Empty method test")
+	// Error acceptable in CI
+	_ = err
+}
