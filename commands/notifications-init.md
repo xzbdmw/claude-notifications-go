@@ -29,7 +29,7 @@ echo "Plugin root: $PLUGIN_ROOT"
 echo ""
 
 # Always download the latest install.sh from GitHub to ensure we have newest version
-INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/777genius/claude-notifications-go/main/bin/install.sh"
+INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/xzbdmw/claude-notifications-go/main/bin/install.sh"
 # Use portable temp directory (works on macOS, Linux, Windows Git Bash)
 TEMP_DIR="${TMPDIR:-${TEMP:-/tmp}}"
 TEMP_INSTALL_SCRIPT="${TEMP_DIR}/claude-notifications-install-$$.sh"
