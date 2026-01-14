@@ -2,7 +2,8 @@
   "notifications": {
     "desktop": {
       "enabled": true,
-      "sound": true,
+      "method": "osc9",
+      "sound": false,
       "volume": 1.0,
       "appIcon": "${CLAUDE_PLUGIN_ROOT}/claude_icon.png",
       "clickToFocus": true,
