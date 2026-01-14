@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -35,8 +36,9 @@ func New(cfg *config.Config) *Notifier {
 	}
 }
 
-// SendDesktop sends a desktop notification using beeep (cross-platform)
-// On macOS with clickToFocus enabled, uses terminal-notifier for click-to-focus support
+// SendDesktop sends a desktop notification using the configured method
+// Methods: "osc9", "terminal-notifier", "beeep", "auto" (default)
+// On macOS with clickToFocus enabled and method=auto, uses terminal-notifier for click-to-focus support
 func (n *Notifier) SendDesktop(status analyzer.Status, message string) error {
 	if !n.cfg.IsDesktopEnabled() {
 		logging.Debug("Desktop notifications disabled, skipping")
@@ -70,24 +72,52 @@ func (n *Notifier) SendDesktop(status analyzer.Status, message string) error {
 		appIcon = ""
 	}
 
-	// macOS: Try terminal-notifier for click-to-focus support
-	if platform.IsMacOS() && n.cfg.Notifications.Desktop.ClickToFocus {
-		if IsTerminalNotifierAvailable() {
+	method := n.cfg.Notifications.Desktop.Method
+
+	// Handle explicit method selection
+	switch method {
+	case "osc9":
+		// OSC9: Terminal escape sequence notification (iTerm2, kitty, etc.)
+		return n.sendWithOSC9(title, cleanMessage, statusInfo.Sound)
+
+	case "terminal-notifier":
+		// terminal-notifier: macOS only with click-to-focus
+		if platform.IsMacOS() && IsTerminalNotifierAvailable() {
 			if err := n.sendWithTerminalNotifier(title, cleanMessage); err != nil {
 				logging.Warn("terminal-notifier failed, falling back to beeep: %v", err)
-				// Fall through to beeep
-			} else {
-				logging.Debug("Desktop notification sent via terminal-notifier: title=%s", title)
-				n.playSoundAsync(statusInfo.Sound)
-				return nil
+				return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
 			}
-		} else {
-			logging.Debug("terminal-notifier not available, using beeep (run /claude-notifications-go:notifications-init to enable click-to-focus)")
+			n.playSoundAsync(statusInfo.Sound)
+			return nil
 		}
-	}
+		logging.Debug("terminal-notifier not available or not on macOS, falling back to beeep")
+		return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
 
-	// Standard path: beeep (Windows, Linux, macOS fallback)
-	return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+	case "beeep":
+		// beeep: Cross-platform desktop notifications
+		return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+
+	default:
+		// "auto" or "": Use smart defaults
+		// macOS: Try terminal-notifier for click-to-focus support
+		if platform.IsMacOS() && n.cfg.Notifications.Desktop.ClickToFocus {
+			if IsTerminalNotifierAvailable() {
+				if err := n.sendWithTerminalNotifier(title, cleanMessage); err != nil {
+					logging.Warn("terminal-notifier failed, falling back to beeep: %v", err)
+					// Fall through to beeep
+				} else {
+					logging.Debug("Desktop notification sent via terminal-notifier: title=%s", title)
+					n.playSoundAsync(statusInfo.Sound)
+					return nil
+				}
+			} else {
+				logging.Debug("terminal-notifier not available, using beeep (run /claude-notifications-go:notifications-init to enable click-to-focus)")
+			}
+		}
+
+		// Standard path: beeep (Windows, Linux, macOS fallback)
+		return n.sendWithBeeep(title, cleanMessage, appIcon, statusInfo.Sound)
+	}
 }
 
 // sendWithTerminalNotifier sends notification via terminal-notifier on macOS
@@ -156,6 +186,43 @@ func (n *Notifier) sendWithBeeep(title, message, appIcon, sound string) error {
 	}
 
 	logging.Debug("Desktop notification sent via beeep: title=%s", title)
+
+	n.playSoundAsync(sound)
+	return nil
+}
+
+// sendWithOSC9 sends notification via OSC9 escape sequence
+// OSC9 is supported by terminals like iTerm2, kitty, and others
+// Format: ESC ] 9 ; message BEL or ESC ] 9 ; message ESC \
+func (n *Notifier) sendWithOSC9(title, message, sound string) error {
+	// Combine title and message for OSC9
+	notifyText := title
+	if message != "" {
+		notifyText = fmt.Sprintf("%s: %s", title, message)
+	}
+
+	// Truncate to prevent overly long notifications
+	if len(notifyText) > 200 {
+		notifyText = notifyText[:197] + "..."
+	}
+
+	// Write OSC9 escape sequence to /dev/tty
+	// Format: ESC ] 9 ; message ESC \
+	tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0)
+	if err != nil {
+		logging.Error("Failed to open /dev/tty for OSC9: %v", err)
+		return fmt.Errorf("failed to open /dev/tty: %w", err)
+	}
+	defer tty.Close()
+
+	// OSC9 sequence: \033]9;message\033\\
+	osc9 := fmt.Sprintf("\033]9;%s\033\\", notifyText)
+	if _, err := tty.WriteString(osc9); err != nil {
+		logging.Error("Failed to write OSC9 sequence: %v", err)
+		return fmt.Errorf("failed to write OSC9: %w", err)
+	}
+
+	logging.Debug("Desktop notification sent via OSC9: title=%s", title)
 
 	n.playSoundAsync(sound)
 	return nil

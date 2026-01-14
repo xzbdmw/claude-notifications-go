@@ -507,6 +507,29 @@ func TestValidate_NegativeCooldown(t *testing.T) {
 	assert.Contains(t, err.Error(), "suppressQuestionAfterTaskCompleteSeconds must be >= 0")
 }
 
+func TestValidate_NotificationMethod(t *testing.T) {
+	validMethods := []string{"", "auto", "osc9", "terminal-notifier", "beeep"}
+	for _, method := range validMethods {
+		t.Run("valid_method_"+method, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Notifications.Desktop.Method = method
+			err := cfg.Validate()
+			assert.NoError(t, err)
+		})
+	}
+
+	invalidMethods := []string{"invalid", "OSC9", "BEEEP", "notify-send", "growl"}
+	for _, method := range invalidMethods {
+		t.Run("invalid_method_"+method, func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Notifications.Desktop.Method = method
+			err := cfg.Validate()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid notification method")
+		})
+	}
+}
+
 // === Tests for Click-to-Focus settings ===
 
 func TestDefaultConfig_ClickToFocus(t *testing.T) {
